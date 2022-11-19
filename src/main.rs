@@ -6,10 +6,13 @@ use fsearch::Config;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let config = Config::build(&args).unwrap_or(Config {query: String::from("a"), file_path: String::from("b"), use_regex: false});
+    let config = Config::build(&args).unwrap_or_else(|e| {
+        eprintln!("Error in config: {e}");
+        process::abort();
+    });
 
     if let Err(e) = fsearch::run(config) {
-        println!("Error happened: {e}");
+        eprintln!("Error happened: {e}");
         process::exit(1);
     }
 }
