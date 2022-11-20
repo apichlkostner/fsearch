@@ -1,11 +1,13 @@
 use std::error::Error;
+use std::io;
 use std::fs;
 use regex::Regex;
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let file = fs::read_to_string(&config.file_path)?;
+    let file = fs::File::open(&config.file_path)?;
+    let reader = io::BufReader::new(file);
 
-    let lines = search(&config.query, &file, config.use_regex)?;
+    let lines = search(&config.query, reader, config.use_regex)?;
     for line in lines {
         println!("{line}");
     }
@@ -36,20 +38,25 @@ impl Config {
     }
 }
 
-pub fn search<'a>(query: &str, contents: &'a str, use_regex: bool) -> Result<Vec<&'a str>, Box<dyn Error>> {
+pub fn search(query: &str, bufreader: impl io::BufRead, use_regex: bool) -> Result<Vec<String>, Box<dyn Error>> {
     let mut results = Vec::new();
+    let lines = bufreader.lines();
 
     if use_regex {
         let re = Regex::new(query)?;
-        for line in contents.lines() {
-            if re.is_match(line) {
-                results.push(line);
+        for line in lines {
+            if let Ok(l) = line {
+                if re.is_match(&l) {
+                    results.push(l);
+                }
             }
         }
     } else {
-        for line in contents.lines() {
-            if line.contains(query) {
-                results.push(line);
+        for line in lines {
+            if let Ok(l) = line {
+                if l.contains(query) {
+                    results.push(l);
+                }
             }
         }
     }
@@ -67,9 +74,10 @@ mod tests {
         let contents = "\
 Rust:
 safe, fast, productive.
-Pick three.";
+Pick three.".as_bytes();
+        let bufread = io::BufReader::new(contents);
 
-        let res = search(query, contents, false).unwrap();
+        let res = search(query, bufread, false).unwrap();
         assert_eq!(vec!["safe, fast, productive."], res);
     }
 
@@ -81,9 +89,10 @@ Rust:
 safe, fast, productive.
 safe, fast, produ.*ctive.
 safe, fast, produ.*fctive.
-Pick three.";
+Pick three.".as_bytes();
 
-        let res = search(query, contents, false).unwrap();
+        let bufread = io::BufReader::new(contents);
+        let res = search(query, bufread, false).unwrap();
         assert_eq!(vec!["safe, fast, produ.*ctive."], res);
     }
 
@@ -93,9 +102,10 @@ Pick three.";
         let contents = "\
 Rust:
 safe, fast, productive.
-Pick three.";
+Pick three.".as_bytes();
 
-        let res = search(query, contents, true).unwrap();
+        let bufread = io::BufReader::new(contents);
+        let res = search(query, bufread, true).unwrap();
         assert_eq!(vec!["safe, fast, productive."], res);
     }
 
@@ -105,9 +115,10 @@ Pick three.";
         let contents = "\
 Rust:
 safe, fast, productive.
-Pick three.";
+Pick three.".as_bytes();
 
-        let res = search(query, contents, true);
+        let bufread = io::BufReader::new(contents);
+        let res = search(query, bufread, true);
         assert!(res.is_err());
     }
 }
